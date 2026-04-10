@@ -14,7 +14,7 @@ const Index = () => {
     members, rootMembers, filteredMembers, selectedMember,
     selectedId, searchQuery, setSearchQuery, setSelectedId,
     addMember, updateMember, deleteMember,
-    getChildren, getSiblings, getParent,
+    getChildren, getSiblings, getParent, getSpouse,
     exportData, importData,
   } = useFamilyTree();
 
