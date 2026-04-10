@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useFamilyTree } from '@/hooks/useFamilyTree';
 import { MemberForm } from '@/components/MemberForm';
 import { TreeNode } from '@/components/TreeNode';
+import { FamilyTreeGraph } from '@/components/FamilyTreeGraph';
 import { MemberDetail } from '@/components/MemberDetail';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -144,17 +145,13 @@ const Index = () => {
                   )}
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {rootMembers.map(m => (
-                    <TreeNode
-                      key={m.id}
-                      member={m}
-                      getChildren={getChildren}
-                      selectedId={selectedId}
-                      onSelect={setSelectedId}
-                    />
-                  ))}
-                </div>
+                <FamilyTreeGraph
+                  members={members}
+                  rootMembers={rootMembers}
+                  getChildren={getChildren}
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                />
               )}
             </div>
 
