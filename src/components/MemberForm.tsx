@@ -32,6 +32,7 @@ export function MemberForm({ open, onOpenChange, members, editingMember, onSubmi
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [fatherId, setFatherId] = useState<string>('');
   const [motherId, setMotherId] = useState<string>('');
+  const [spouseId, setSpouseId] = useState<string>('');
 
   useEffect(() => {
     if (editingMember) {
@@ -40,17 +41,25 @@ export function MemberForm({ open, onOpenChange, members, editingMember, onSubmi
       setDateOfBirth(editingMember.dateOfBirth || '');
       setFatherId(editingMember.fatherId || '');
       setMotherId(editingMember.motherId || '');
+      setSpouseId(editingMember.spouseId || '');
     } else {
       setName('');
       setGender('male');
       setDateOfBirth('');
       setFatherId('');
       setMotherId('');
+      setSpouseId('');
     }
   }, [editingMember, open]);
 
   const males = members.filter(m => m.gender === 'male' && m.id !== editingMember?.id);
   const females = members.filter(m => m.gender === 'female' && m.id !== editingMember?.id);
+
+  // Available spouses: anyone not already married (except current spouse if editing)
+  const availableSpouses = members.filter(m =>
+    m.id !== editingMember?.id &&
+    (!m.spouseId || m.spouseId === editingMember?.id)
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,6 +70,7 @@ export function MemberForm({ open, onOpenChange, members, editingMember, onSubmi
       dateOfBirth: dateOfBirth || undefined,
       fatherId: fatherId || undefined,
       motherId: motherId || undefined,
+      spouseId: spouseId || undefined,
     });
     onOpenChange(false);
   };
@@ -133,6 +143,21 @@ export function MemberForm({ open, onOpenChange, members, editingMember, onSubmi
               <SelectContent>
                 <SelectItem value="_none">None</SelectItem>
                 {females.map(m => (
+                  <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Spouse / Partner</Label>
+            <Select value={spouseId || '_none'} onValueChange={v => setSpouseId(v === '_none' ? '' : v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select spouse" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_none">None</SelectItem>
+                {availableSpouses.map(m => (
                   <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
                 ))}
               </SelectContent>

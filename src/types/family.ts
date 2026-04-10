@@ -7,6 +7,7 @@ export interface FamilyMember {
   dateOfBirth?: string;
   fatherId?: string;
   motherId?: string;
+  spouseId?: string;
 }
 
 export interface FamilyTree {

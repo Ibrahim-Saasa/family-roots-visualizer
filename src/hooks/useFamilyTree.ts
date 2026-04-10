@@ -28,22 +28,49 @@ export function useFamilyTree() {
 
   const addMember = useCallback((member: Omit<FamilyMember, 'id'>) => {
     const newMember: FamilyMember = { ...member, id: crypto.randomUUID() };
-    persist([...members, newMember]);
+    let updated = [...members, newMember];
+    // If spouse is set, update the spouse's spouseId to point back
+    if (newMember.spouseId) {
+      updated = updated.map(m =>
+        m.id === newMember.spouseId ? { ...m, spouseId: newMember.id } : m
+      );
+    }
+    persist(updated);
     return newMember;
   }, [members, persist]);
 
   const updateMember = useCallback((id: string, updates: Partial<Omit<FamilyMember, 'id'>>) => {
-    persist(members.map(m => m.id === id ? { ...m, ...updates } : m));
+    const oldMember = members.find(m => m.id === id);
+    let updated = members.map(m => m.id === id ? { ...m, ...updates } : m);
+
+    // Handle spouse changes: clear old spouse's reference, set new spouse's reference
+    const oldSpouseId = oldMember?.spouseId;
+    const newSpouseId = updates.spouseId;
+
+    if (oldSpouseId !== newSpouseId) {
+      if (oldSpouseId) {
+        updated = updated.map(m =>
+          m.id === oldSpouseId ? { ...m, spouseId: undefined } : m
+        );
+      }
+      if (newSpouseId) {
+        updated = updated.map(m =>
+          m.id === newSpouseId ? { ...m, spouseId: id } : m
+        );
+      }
+    }
+
+    persist(updated);
   }, [members, persist]);
 
   const deleteMember = useCallback((id: string) => {
-    // Remove member and clear references to them as parent
     const updated = members
       .filter(m => m.id !== id)
       .map(m => ({
         ...m,
         fatherId: m.fatherId === id ? undefined : m.fatherId,
         motherId: m.motherId === id ? undefined : m.motherId,
+        spouseId: m.spouseId === id ? undefined : m.spouseId,
       }));
     persist(updated);
     if (selectedId === id) setSelectedId(null);
@@ -62,6 +89,11 @@ export function useFamilyTree() {
   }, [members]);
 
   const getParent = useCallback((id?: string) => {
+    if (!id) return undefined;
+    return members.find(m => m.id === id);
+  }, [members]);
+
+  const getSpouse = useCallback((id?: string) => {
     if (!id) return undefined;
     return members.find(m => m.id === id);
   }, [members]);
@@ -112,6 +144,7 @@ export function useFamilyTree() {
     getChildren,
     getSiblings,
     getParent,
+    getSpouse,
     exportData,
     importData,
   };

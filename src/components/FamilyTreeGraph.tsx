@@ -1,7 +1,7 @@
-import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { useRef, useMemo } from 'react';
 import { FamilyMember } from '@/types/family';
 import { cn } from '@/lib/utils';
-import { User } from 'lucide-react';
+import { User, Heart } from 'lucide-react';
 
 interface FamilyTreeGraphProps {
   members: FamilyMember[];
@@ -23,40 +23,100 @@ const NODE_WIDTH = 140;
 const NODE_HEIGHT = 60;
 const H_GAP = 24;
 const V_GAP = 80;
+const SPOUSE_GAP = 8;
+const COUPLE_WIDTH = NODE_WIDTH * 2 + SPOUSE_GAP;
 
 function computeLayout(
   rootMembers: FamilyMember[],
-  getChildren: (id: string) => FamilyMember[]
+  getChildren: (id: string) => FamilyMember[],
+  allMembers: FamilyMember[]
 ): { nodes: NodeLayout[]; totalWidth: number; totalHeight: number } {
   const nodes: NodeLayout[] = [];
+  const placed = new Set<string>();
   let xCursor = 0;
 
-  function layoutNode(member: FamilyMember, depth: number): { x: number; width: number } {
-    const children = getChildren(member.id);
-    const y = depth * (NODE_HEIGHT + V_GAP);
+  function getSpouse(member: FamilyMember): FamilyMember | undefined {
+    if (!member.spouseId) return undefined;
+    return allMembers.find(m => m.id === member.spouseId);
+  }
 
-    if (children.length === 0) {
-      const x = xCursor;
-      nodes.push({ member, x, y, width: NODE_WIDTH, height: NODE_HEIGHT });
-      xCursor += NODE_WIDTH + H_GAP;
-      return { x, width: NODE_WIDTH };
+  function layoutNode(member: FamilyMember, depth: number): { centerX: number; width: number } {
+    if (placed.has(member.id)) {
+      const existing = nodes.find(n => n.member.id === member.id);
+      if (existing) return { centerX: existing.x + existing.width / 2, width: existing.width };
+      return { centerX: 0, width: 0 };
     }
 
-    const childLayouts = children.map(c => layoutNode(c, depth + 1));
-    const firstChildCenter = childLayouts[0].x + childLayouts[0].width / 2;
-    const lastChildCenter = childLayouts[childLayouts.length - 1].x + childLayouts[childLayouts.length - 1].width / 2;
-    const parentX = (firstChildCenter + lastChildCenter) / 2 - NODE_WIDTH / 2;
+    const spouse = getSpouse(member);
+    const hasSpouse = spouse && !placed.has(spouse.id);
+    const children = getChildren(member.id);
+    // Also get children of spouse that aren't already included
+    const spouseChildren = hasSpouse ? getChildren(spouse.id).filter(c => !children.some(ch => ch.id === c.id)) : [];
+    const allChildren = [...children, ...spouseChildren];
+    const y = depth * (NODE_HEIGHT + V_GAP);
+
+    // Mark as placed
+    placed.add(member.id);
+    if (hasSpouse) placed.add(spouse.id);
+
+    const coupleWidth = hasSpouse ? COUPLE_WIDTH : NODE_WIDTH;
+
+    if (allChildren.length === 0) {
+      const x = xCursor;
+      nodes.push({ member, x, y, width: NODE_WIDTH, height: NODE_HEIGHT });
+      if (hasSpouse) {
+        nodes.push({ member: spouse, x: x + NODE_WIDTH + SPOUSE_GAP, y, width: NODE_WIDTH, height: NODE_HEIGHT });
+      }
+      xCursor += coupleWidth + H_GAP;
+      return { centerX: x + coupleWidth / 2, width: coupleWidth };
+    }
+
+    const childLayouts = allChildren
+      .filter(c => !placed.has(c.id))
+      .map(c => layoutNode(c, depth + 1));
+
+    if (childLayouts.length === 0) {
+      const x = xCursor;
+      nodes.push({ member, x, y, width: NODE_WIDTH, height: NODE_HEIGHT });
+      if (hasSpouse) {
+        nodes.push({ member: spouse, x: x + NODE_WIDTH + SPOUSE_GAP, y, width: NODE_WIDTH, height: NODE_HEIGHT });
+      }
+      xCursor += coupleWidth + H_GAP;
+      return { centerX: x + coupleWidth / 2, width: coupleWidth };
+    }
+
+    const firstCenter = childLayouts[0].centerX;
+    const lastCenter = childLayouts[childLayouts.length - 1].centerX;
+    const childrenCenter = (firstCenter + lastCenter) / 2;
+    const parentX = childrenCenter - coupleWidth / 2;
 
     nodes.push({ member, x: parentX, y, width: NODE_WIDTH, height: NODE_HEIGHT });
-    return { x: parentX, width: NODE_WIDTH };
+    if (hasSpouse) {
+      nodes.push({ member: spouse, x: parentX + NODE_WIDTH + SPOUSE_GAP, y, width: NODE_WIDTH, height: NODE_HEIGHT });
+    }
+
+    return { centerX: parentX + coupleWidth / 2, width: coupleWidth };
   }
 
+  // Filter roots: don't start from someone who is a spouse of another root
+  const rootSpouseIds = new Set(rootMembers.map(m => m.spouseId).filter(Boolean));
+  const filteredRoots = rootMembers.filter(m => !rootSpouseIds.has(m.id) || !placed.has(m.id));
+
+  for (const root of filteredRoots) {
+    if (!placed.has(root.id)) {
+      layoutNode(root, 0);
+    }
+  }
+
+  // Handle any remaining unplaced root members (spouses that got filtered)
   for (const root of rootMembers) {
-    layoutNode(root, 0);
+    if (!placed.has(root.id)) {
+      layoutNode(root, 0);
+    }
   }
 
-  const maxX = Math.max(...nodes.map(n => n.x + n.width), 0);
-  const maxY = Math.max(...nodes.map(n => n.y + n.height), 0);
+  const maxX = nodes.length > 0 ? Math.max(...nodes.map(n => n.x + n.width)) : 0;
+  const maxY = nodes.length > 0 ? Math.max(...nodes.map(n => n.y + n.height)) : 0;
 
   return { nodes, totalWidth: maxX + 40, totalHeight: maxY + 40 };
 }
@@ -65,8 +125,8 @@ export function FamilyTreeGraph({ members, rootMembers, getChildren, selectedId,
   const containerRef = useRef<HTMLDivElement>(null);
 
   const { nodes, totalWidth, totalHeight } = useMemo(
-    () => computeLayout(rootMembers, getChildren),
-    [rootMembers, getChildren]
+    () => computeLayout(rootMembers, getChildren, members),
+    [rootMembers, getChildren, members]
   );
 
   const nodeMap = useMemo(() => {
@@ -75,7 +135,7 @@ export function FamilyTreeGraph({ members, rootMembers, getChildren, selectedId,
     return map;
   }, [nodes]);
 
-  // Build edges: parent -> child
+  // Parent-child edges
   const edges = useMemo(() => {
     const result: { parentNode: NodeLayout; childNode: NodeLayout }[] = [];
     for (const node of nodes) {
@@ -92,6 +152,24 @@ export function FamilyTreeGraph({ members, rootMembers, getChildren, selectedId,
     return result;
   }, [nodes, nodeMap]);
 
+  // Spouse pairs (deduplicated)
+  const spousePairs = useMemo(() => {
+    const pairs: { a: NodeLayout; b: NodeLayout }[] = [];
+    const seen = new Set<string>();
+    for (const node of nodes) {
+      const { member } = node;
+      if (member.spouseId && !seen.has(member.id)) {
+        const spouseNode = nodeMap.get(member.spouseId);
+        if (spouseNode) {
+          pairs.push({ a: node, b: spouseNode });
+          seen.add(member.id);
+          seen.add(member.spouseId);
+        }
+      }
+    }
+    return pairs;
+  }, [nodes, nodeMap]);
+
   if (members.length === 0) return null;
 
   const padding = 20;
@@ -99,15 +177,48 @@ export function FamilyTreeGraph({ members, rootMembers, getChildren, selectedId,
   return (
     <div ref={containerRef} className="overflow-auto rounded-xl border bg-card/50 p-4">
       <div style={{ minWidth: totalWidth + padding * 2, minHeight: totalHeight + padding * 2, position: 'relative' }}>
-        {/* SVG for connecting lines */}
         <svg
           width={totalWidth + padding * 2}
           height={totalHeight + padding * 2}
           className="absolute inset-0"
           style={{ pointerEvents: 'none' }}
         >
+          {/* Spouse connection lines */}
+          {spousePairs.map((pair, i) => {
+            const ax = padding + pair.a.x + NODE_WIDTH;
+            const ay = padding + pair.a.y + NODE_HEIGHT / 2;
+            const bx = padding + pair.b.x;
+            const by = padding + pair.b.y + NODE_HEIGHT / 2;
+            const midX = (ax + bx) / 2;
+
+            return (
+              <g key={`spouse-${i}`}>
+                <line
+                  x1={ax} y1={ay} x2={bx} y2={by}
+                  stroke="hsl(var(--primary))"
+                  strokeWidth="2"
+                  strokeDasharray="6 3"
+                />
+                {/* Heart icon position */}
+                <circle cx={midX} cy={ay} r={8} fill="hsl(var(--background))" />
+                <text x={midX} y={ay + 4} textAnchor="middle" fontSize="10" fill="hsl(var(--primary))">♥</text>
+              </g>
+            );
+          })}
+
+          {/* Parent-child edges */}
           {edges.map((edge, i) => {
-            const px = padding + edge.parentNode.x + NODE_WIDTH / 2;
+            // For couples, draw from the midpoint between the couple
+            const parentMember = edge.parentNode.member;
+            const spouseNode = parentMember.spouseId ? nodeMap.get(parentMember.spouseId) : undefined;
+            let px: number;
+            if (spouseNode && spouseNode.y === edge.parentNode.y) {
+              // Draw from couple midpoint
+              const leftX = Math.min(edge.parentNode.x, spouseNode.x);
+              px = padding + leftX + COUPLE_WIDTH / 2;
+            } else {
+              px = padding + edge.parentNode.x + NODE_WIDTH / 2;
+            }
             const py = padding + edge.parentNode.y + NODE_HEIGHT;
             const cx = padding + edge.childNode.x + NODE_WIDTH / 2;
             const cy = padding + edge.childNode.y;
@@ -115,7 +226,7 @@ export function FamilyTreeGraph({ members, rootMembers, getChildren, selectedId,
 
             return (
               <path
-                key={i}
+                key={`edge-${i}`}
                 d={`M ${px} ${py} C ${px} ${midY}, ${cx} ${midY}, ${cx} ${cy}`}
                 fill="none"
                 stroke="hsl(var(--tree-line))"
