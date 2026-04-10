@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useFamilyTree } from '@/hooks/useFamilyTree';
 import { MemberForm } from '@/components/MemberForm';
 import { TreeNode } from '@/components/TreeNode';
+import { FamilyTreeGraph } from '@/components/FamilyTreeGraph';
 import { MemberDetail } from '@/components/MemberDetail';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
