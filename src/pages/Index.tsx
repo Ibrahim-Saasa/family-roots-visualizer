@@ -145,17 +145,13 @@ const Index = () => {
                   )}
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {rootMembers.map(m => (
-                    <TreeNode
-                      key={m.id}
-                      member={m}
-                      getChildren={getChildren}
-                      selectedId={selectedId}
-                      onSelect={setSelectedId}
-                    />
-                  ))}
-                </div>
+                <FamilyTreeGraph
+                  members={members}
+                  rootMembers={rootMembers}
+                  getChildren={getChildren}
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                />
               )}
             </div>
 
