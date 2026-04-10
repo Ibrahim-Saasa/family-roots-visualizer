@@ -164,6 +164,7 @@ const Index = () => {
                     getParent={getParent}
                     getChildren={getChildren}
                     getSiblings={getSiblings}
+                    getSpouse={getSpouse}
                     onEdit={handleEdit}
                     onDelete={handleDelete}
                     onClose={() => setSelectedId(null)}
