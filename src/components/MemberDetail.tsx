@@ -2,7 +2,7 @@ import { FamilyMember } from '@/types/family';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Pencil, Trash2, X, User, Calendar, Users } from 'lucide-react';
+import { Pencil, Trash2, X, User, Calendar, Heart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MemberDetailProps {
@@ -10,6 +10,7 @@ interface MemberDetailProps {
   getParent: (id?: string) => FamilyMember | undefined;
   getChildren: (id: string) => FamilyMember[];
   getSiblings: (m: FamilyMember) => FamilyMember[];
+  getSpouse: (id?: string) => FamilyMember | undefined;
   onEdit: () => void;
   onDelete: () => void;
   onClose: () => void;
@@ -17,13 +18,14 @@ interface MemberDetailProps {
 }
 
 export function MemberDetail({
-  member, getParent, getChildren, getSiblings,
+  member, getParent, getChildren, getSiblings, getSpouse,
   onEdit, onDelete, onClose, onSelect
 }: MemberDetailProps) {
   const father = getParent(member.fatherId);
   const mother = getParent(member.motherId);
   const children = getChildren(member.id);
   const siblings = getSiblings(member);
+  const spouse = getSpouse(member.spouseId);
 
   const genderLabel = member.gender === 'male' ? 'Male' : member.gender === 'female' ? 'Female' : 'Other';
 
@@ -55,6 +57,17 @@ export function MemberDetail({
             <Calendar className="h-4 w-4 text-muted-foreground" />
             <span className="text-muted-foreground">Born:</span>
             <span>{member.dateOfBirth}</span>
+          </div>
+        )}
+
+        {spouse && (
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              <Heart className="h-3 w-3" /> Spouse
+            </p>
+            <Badge variant="outline" className="cursor-pointer hover:bg-secondary" onClick={() => onSelect(spouse.id)}>
+              {spouse.name}
+            </Badge>
           </div>
         )}
 
