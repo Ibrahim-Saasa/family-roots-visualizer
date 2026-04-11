@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { FamilyMember, Gender } from '@/types/family';
+import { validateImportData } from '@/lib/validation';
 
 const STORAGE_KEY = 'family-tree-data';
 
@@ -119,7 +120,6 @@ export function useFamilyTree() {
   const importData = useCallback((json: string): { success: boolean; errors: string[] } => {
     try {
       const data = JSON.parse(json);
-      const { validateImportData } = require('@/lib/validation');
       const result = validateImportData(data);
       if (result.valid) {
         persist(data);
