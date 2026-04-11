@@ -62,12 +62,15 @@ const Index = () => {
       if (!file) return;
       const reader = new FileReader();
       reader.onload = (ev) => {
-        const success = importData(ev.target?.result as string);
-        if (success) {
+        const result = importData(ev.target?.result as string);
+        if (result.success) {
           toast.success('Family tree imported');
           setSelectedId(null);
         } else {
-          toast.error('Invalid file format');
+          const errorMsg = result.errors.length > 0
+            ? result.errors.slice(0, 3).join(' ')
+            : 'Invalid file format';
+          toast.error(errorMsg);
         }
       };
       reader.readAsText(file);
