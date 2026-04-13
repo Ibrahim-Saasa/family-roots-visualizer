@@ -32,93 +32,132 @@ function computeLayout(
   allMembers: FamilyMember[]
 ): { nodes: NodeLayout[]; totalWidth: number; totalHeight: number } {
   const nodes: NodeLayout[] = [];
-  const placed = new Set<string>();
-  let xCursor = 0;
+  const positions = new Map<string, { x: number; y: number }>();
+  const processed = new Set<string>();
 
   function getSpouse(member: FamilyMember): FamilyMember | undefined {
     if (!member.spouseId) return undefined;
     return allMembers.find(m => m.id === member.spouseId);
   }
 
-  function layoutNode(member: FamilyMember, depth: number): { centerX: number; width: number } {
-    if (placed.has(member.id)) {
-      const existing = nodes.find(n => n.member.id === member.id);
-      if (existing) return { centerX: existing.x + existing.width / 2, width: existing.width };
-      return { centerX: 0, width: 0 };
+  interface SubtreeLayout {
+    width: number;
+    height: number;
+    centerX: number;
+  }
+
+  // Layout subtree and return dimensions with center position
+  function layoutSubtree(member: FamilyMember, depth: number, xOffset: number): SubtreeLayout {
+    if (processed.has(member.id)) {
+      return { width: NODE_WIDTH, height: NODE_HEIGHT, centerX: xOffset + NODE_WIDTH / 2 };
     }
 
     const spouse = getSpouse(member);
-    const hasSpouse = spouse && !placed.has(spouse.id);
+    const hasSpouse = !!spouse;
     const children = getChildren(member.id);
-    // Also get children of spouse that aren't already included
-    const spouseChildren = hasSpouse ? getChildren(spouse.id).filter(c => !children.some(ch => ch.id === c.id)) : [];
+    const spouseChildren = hasSpouse 
+      ? getChildren(spouse!.id).filter(c => !children.some(ch => ch.id === c.id)) 
+      : [];
     const allChildren = [...children, ...spouseChildren];
+
     const y = depth * (NODE_HEIGHT + V_GAP);
+    const nodeWidth = hasSpouse ? COUPLE_WIDTH : NODE_WIDTH;
 
-    // Mark as placed
-    placed.add(member.id);
-    if (hasSpouse) placed.add(spouse.id);
-
-    const coupleWidth = hasSpouse ? COUPLE_WIDTH : NODE_WIDTH;
-
-    if (allChildren.length === 0) {
-      const x = xCursor;
-      nodes.push({ member, x, y, width: NODE_WIDTH, height: NODE_HEIGHT });
-      if (hasSpouse) {
-        nodes.push({ member: spouse, x: x + NODE_WIDTH + SPOUSE_GAP, y, width: NODE_WIDTH, height: NODE_HEIGHT });
-      }
-      xCursor += coupleWidth + H_GAP;
-      return { centerX: x + coupleWidth / 2, width: coupleWidth };
-    }
-
-    const childLayouts = allChildren
-      .filter(c => !placed.has(c.id))
-      .map(c => layoutNode(c, depth + 1));
-
-    if (childLayouts.length === 0) {
-      const x = xCursor;
-      nodes.push({ member, x, y, width: NODE_WIDTH, height: NODE_HEIGHT });
-      if (hasSpouse) {
-        nodes.push({ member: spouse, x: x + NODE_WIDTH + SPOUSE_GAP, y, width: NODE_WIDTH, height: NODE_HEIGHT });
-      }
-      xCursor += coupleWidth + H_GAP;
-      return { centerX: x + coupleWidth / 2, width: coupleWidth };
-    }
-
-    const firstCenter = childLayouts[0].centerX;
-    const lastCenter = childLayouts[childLayouts.length - 1].centerX;
-    const childrenCenter = (firstCenter + lastCenter) / 2;
-    const parentX = childrenCenter - coupleWidth / 2;
-
-    nodes.push({ member, x: parentX, y, width: NODE_WIDTH, height: NODE_HEIGHT });
+    // Place this node
+    positions.set(member.id, { x: xOffset, y });
+    nodes.push({ member, x: xOffset, y, width: NODE_WIDTH, height: NODE_HEIGHT });
+    
     if (hasSpouse) {
-      nodes.push({ member: spouse, x: parentX + NODE_WIDTH + SPOUSE_GAP, y, width: NODE_WIDTH, height: NODE_HEIGHT });
+      positions.set(spouse!.id, { x: xOffset + NODE_WIDTH + SPOUSE_GAP, y });
+      nodes.push({ member: spouse!, x: xOffset + NODE_WIDTH + SPOUSE_GAP, y, width: NODE_WIDTH, height: NODE_HEIGHT });
     }
 
-    return { centerX: parentX + coupleWidth / 2, width: coupleWidth };
+    processed.add(member.id);
+    if (hasSpouse) processed.add(spouse!.id);
+
+    // If no children, return current node info
+    if (allChildren.length === 0) {
+      return {
+        width: nodeWidth,
+        height: NODE_HEIGHT,
+        centerX: xOffset + nodeWidth / 2
+      };
+    }
+
+    // Layout children
+    let childXOffset = xOffset;
+    let totalChildrenWidth = 0;
+    const childLayouts: SubtreeLayout[] = [];
+
+    for (const child of allChildren) {
+      const childLayout = layoutSubtree(child, depth + 1, childXOffset);
+      childLayouts.push(childLayout);
+      totalChildrenWidth += childLayout.width;
+      childXOffset += childLayout.width + H_GAP;
+    }
+
+    totalChildrenWidth += (allChildren.length - 1) * H_GAP;
+
+    // If children take more space than parent, spread parent to match
+    if (totalChildrenWidth > nodeWidth) {
+      // Recalculate parent to be centered over children
+      const firstChildCenter = childLayouts[0].centerX;
+      const lastChildCenter = childLayouts[childLayouts.length - 1].centerX;
+      const childrenSpanCenter = (firstChildCenter + lastChildCenter) / 2;
+      const newXOffset = childrenSpanCenter - nodeWidth / 2;
+
+      // Update parent position if needed
+      if (newXOffset !== xOffset) {
+        const idx = nodes.findIndex(n => n.member.id === member.id);
+        if (idx !== -1) {
+          nodes[idx].x = newXOffset;
+          positions.set(member.id, { x: newXOffset, y });
+        }
+        if (hasSpouse) {
+          const spouseIdx = nodes.findIndex(n => n.member.id === spouse!.id);
+          if (spouseIdx !== -1) {
+            nodes[spouseIdx].x = newXOffset + NODE_WIDTH + SPOUSE_GAP;
+            positions.set(spouse!.id, { x: newXOffset + NODE_WIDTH + SPOUSE_GAP, y });
+          }
+        }
+        return {
+          width: Math.max(nodeWidth, totalChildrenWidth),
+          height: NODE_HEIGHT + V_GAP + (childLayouts[0]?.height || 0),
+          centerX: childrenSpanCenter
+        };
+      }
+    }
+
+    return {
+      width: Math.max(nodeWidth, totalChildrenWidth),
+      height: NODE_HEIGHT + V_GAP + (childLayouts[0]?.height || 0),
+      centerX: xOffset + nodeWidth / 2
+    };
   }
 
-  // Filter roots: don't start from someone who is a spouse of another root
+  // Filter roots to avoid duplicate spouses
   const rootSpouseIds = new Set(rootMembers.map(m => m.spouseId).filter(Boolean));
-  const filteredRoots = rootMembers.filter(m => !rootSpouseIds.has(m.id) || !placed.has(m.id));
+  const filteredRoots = rootMembers.filter(m => !rootSpouseIds.has(m.id));
 
+  // Layout all family trees
+  let xOffset = 0;
   for (const root of filteredRoots) {
-    if (!placed.has(root.id)) {
-      layoutNode(root, 0);
-    }
+    const layout = layoutSubtree(root, 0, xOffset);
+    xOffset += layout.width + H_GAP;
   }
 
-  // Handle any remaining unplaced root members (spouses that got filtered)
+  // Handle remaining unplaced spouses
   for (const root of rootMembers) {
-    if (!placed.has(root.id)) {
-      layoutNode(root, 0);
+    if (!processed.has(root.id)) {
+      layoutSubtree(root, 0, xOffset);
+      xOffset += COUPLE_WIDTH + H_GAP;
     }
   }
 
   const maxX = nodes.length > 0 ? Math.max(...nodes.map(n => n.x + n.width)) : 0;
   const maxY = nodes.length > 0 ? Math.max(...nodes.map(n => n.y + n.height)) : 0;
 
-  return { nodes, totalWidth: maxX + 40, totalHeight: maxY + 40 };
+  return { nodes, totalWidth: Math.max(maxX + 40, 400), totalHeight: Math.max(maxY + 40, 300) };
 }
 
 export function FamilyTreeGraph({ members, rootMembers, getChildren, selectedId, onSelect }: FamilyTreeGraphProps) {
